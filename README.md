@@ -1,9 +1,11 @@
-
-# Bài tập 1: Triển khai hệ thống Docker Compose với Nginx, Node-RED, MariaDB, phpMyAdmin và Cloudflare Tunnel
-
+# MÔN HỌC LẬP TRÌNH WEB
 ## Họ và tên: Đàm Ngọc Sơn
 ## Lớp: K59.KMT.K01
 ## MSSV: K235480106061
+
+
+
+# Bài tập 1: Triển khai hệ thống Docker Compose với Nginx, Node-RED, MariaDB, phpMyAdmin và Cloudflare Tunnel
 
 ## Mục tiêu
 
@@ -411,3 +413,298 @@ Bài tập đã hoàn thành đầy đủ các yêu cầu:
 2. ✅ Cài Docker + Docker Compose.
 3. ✅ Triển khai 5 dịch vụ trong Docker Compose: Nginx, Node-RED, MariaDB, phpMyAdmin, Cloudflared.
 4. ✅ Cấu hình Nginx chạy 2 website với 2 domain khác nhau (`site1.damngocson.id.vn` và `site2.damngocson.id.vn`), publish ra Internet qua Cloudflare Tunnel với domain thật `damngocson.id.vn`.
+
+# Bài tập 2: Xây dựng API bằng Node-RED và gọi API bằng JavaScript qua Nginx
+ 
+## Mục tiêu
+ 
+1. Sử dụng Node-RED (node `http in` + `http response`) để tạo một API đơn giản trả về dữ liệu dạng JSON.
+2. Cấu hình Nginx để website (dùng JavaScript) gọi được API trên qua domain thật, kèm thuật toán xử lý dữ liệu tự nghĩ.
+3. Viết JavaScript trong trang HTML để gọi API và hiển thị dữ liệu.
+## Thông tin API
+ 
+| Thành phần | Giá trị |
+|---|---|
+| Domain sử dụng | `damngocson.id.vn` |
+| Endpoint API | `https://site1.damngocson.id.vn/api/dssv` |
+| Phương thức | `GET` |
+| Định dạng trả về | JSON |
+---
+ 
+## 1. Tạo API bằng Node-RED
+ 
+### 1.1. Sơ đồ flow
+ 
+```
+[http in]  --->  [function]  --->  [http response]
+GET /api/dssv    Xử lý dữ liệu     Trả về JSON
+```
+> <img width="1917" height="1028" alt="image" src="https://github.com/user-attachments/assets/148ce6b2-9e10-46b0-b33c-5f7ff1d26689" />
+
+### 1.2. Cấu hình node `http in`
+ 
+- **Method**: `GET`
+- **URL**: `/api/dssv`
+### 1.3. Cấu hình node `function` — thuật toán tự nghĩ
+ 
+Thuật toán áp dụng:
+- **Sắp xếp giảm dần** danh sách sinh viên theo số tiền (`money`).
+- **Phân loại trạng thái**: nếu `money >= 300000` → `"Du dieu kien"`, ngược lại → `"Chua du"`.
+```javascript
+// Du lieu mau danh sach sinh vien
+const dssv = [
+    { name: "Dam Ngoc Son", money: 500000 },
+    { name: "Truong Van Hai", money: 550000 },
+    { name: "Pham Thanh Son", money: 700000 },
+    { name: "Nguyen Van An", money: 350000 },
+    { name: "Hoang Dinh Diep", money: 250000 }
+];
+ 
+// Thuat toan tu nghi: sap xep giam dan theo money
+dssv.sort((a, b) => b.money - a.money);
+ 
+// Thuat toan tu nghi: danh dau trang thai theo dieu kien money >= 300000
+const dssv_final = dssv.map(sv => ({
+    ...sv,
+    status: sv.money >= 300000 ? "Du dieu kien" : "Chua du"
+}));
+ 
+msg.payload = {
+    ok: 1,
+    msg: "thanh cong",
+    dssv: dssv_final
+};
+ 
+// Bat buoc set Content-Type de trinh duyet hieu day la JSON
+msg.headers = { "Content-Type": "application/json" };
+ 
+return msg;
+```
+ 
+### 1.4. Cấu hình node `http response`
+ 
+Giữ mặc định (Status code: 200), không cần chỉnh thêm.
+ 
+### 1.5. Deploy
+ 
+Bấm nút đỏ **Deploy** ở góc trên bên phải giao diện Node-RED.
+ 
+> <img width="1917" height="1028" alt="image" src="https://github.com/user-attachments/assets/1de40f89-4ee3-4445-a25c-0085b5e77bd8" />
+ 
+### 1.6. Test API nội bộ (trong container)
+ 
+```bash
+curl http://localhost:1880/api/dssv
+```
+ 
+Kết quả:
+ 
+```json
+{"ok":1,"msg":"thanh cong","dssv":[
+  {"name":"Pham Thanh Son","money":700000,"status":"Du dieu kien"},
+  {"name":"Truong Van Hai","money":550000,"status":"Du dieu kien"},
+  {"name":"Dam Ngoc Son","money":500000,"status":"Du dieu kien"},
+  {"name":"Nguyen Van An","money":350000,"status":"Du dieu kien"},
+  {"name":"Hoang Dinh Diep","money":250000,"status":"Chua du"}
+]}
+```
+ 
+> <img width="1917" height="1078" alt="image" src="https://github.com/user-attachments/assets/5aed0f3e-a7d3-4904-9ae9-96ffca2bdc91" />
+ 
+---
+ 
+## 2. Cấu hình Nginx để gọi API qua domain thật
+ 
+Vì Node-RED chạy nội bộ trong Docker network (`nodered:1880`), cần Nginx làm reverse proxy để expose API ra domain công khai.
+ 
+### 2.1. Thêm block `location /api/` vào file `nginx/conf.d/site1.conf`
+ 
+```nginx
+server {
+    listen 80;
+    server_name site1.damngocson.id.vn;
+ 
+    location / {
+        root /usr/share/nginx/site1;
+        index index.html;
+        try_files $uri $uri/ =404;
+    }
+ 
+    location /phpmyadmin/ {
+        proxy_pass http://phpmyadmin:80/;
+        proxy_set_header Host $host;
+    }
+ 
+    # === Reverse proxy API sang Node-RED ===
+    location /api/ {
+        proxy_pass http://nodered:1880/api/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+ 
+        # Cho phép JS gọi API cross-origin (CORS)
+        add_header 'Access-Control-Allow-Origin' '*' always;
+        add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS' always;
+        add_header 'Access-Control-Allow-Headers' 'Content-Type' always;
+    }
+}
+```
+ 
+### 2.2. Khởi động lại Nginx để áp dụng cấu hình
+ 
+```bash
+cd ~/lab1
+docker compose restart nginx
+```
+ 
+### 2.3. Test API qua domain thật
+ 
+```bash
+curl https://site1.damngocson.id.vn/api/dssv
+```
+ 
+Kết quả trả về giống hệt khi test nội bộ ở mục 1.6, xác nhận Nginx đã reverse proxy đúng qua Cloudflare Tunnel.
+ 
+> <img width="1485" height="760" alt="image" src="https://github.com/user-attachments/assets/fb99eb69-8e43-4743-8d39-a477377ecf96" />
+
+---
+ 
+## 3. Viết JavaScript trong HTML để gọi API
+ 
+### 3.1. Nội dung file `nginx/site1/index.html`
+ 
+```html
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>Danh sách sinh viên</title>
+<style>
+    body { font-family: Arial, sans-serif; margin: 40px; background: #f4f6f8; }
+    h1 { color: #2c3e50; }
+    table { border-collapse: collapse; width: 100%; max-width: 600px; background: white; }
+    th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+    th { background: #2c3e50; color: white; }
+    .du { color: green; font-weight: bold; }
+    .chua { color: #c0392b; }
+    #status { margin-bottom: 15px; font-style: italic; }
+</style>
+</head>
+<body>
+ 
+<h1>Danh sách sinh viên (gọi từ API Node-RED)</h1>
+<p id="status">Đang tải dữ liệu...</p>
+ 
+<table id="bang-sv" style="display:none;">
+    <thead>
+        <tr><th>Họ tên</th><th>Số tiền</th><th>Trạng thái</th></tr>
+    </thead>
+    <tbody id="body-sv"></tbody>
+</table>
+ 
+<script>
+    // Gọi API bằng fetch()
+    fetch('/api/dssv')
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Lỗi HTTP: ' + response.status);
+            }
+            return response.json();
+        })
+        .then(data => {
+            const statusEl = document.getElementById('status');
+            const tableEl = document.getElementById('bang-sv');
+            const bodyEl = document.getElementById('body-sv');
+ 
+            if (data.ok === 1) {
+                statusEl.textContent = 'Kết quả: ' + data.msg;
+                tableEl.style.display = 'table';
+ 
+                data.dssv.forEach(sv => {
+                    const row = document.createElement('tr');
+                    const cssClass = sv.status === 'Du dieu kien' ? 'du' : 'chua';
+ 
+                    row.innerHTML = `
+                        <td>${sv.name}</td>
+                        <td>${sv.money.toLocaleString('vi-VN')} đ</td>
+                        <td class="${cssClass}">${sv.status}</td>
+                    `;
+                    bodyEl.appendChild(row);
+                });
+            } else {
+                statusEl.textContent = 'API trả về lỗi!';
+            }
+        })
+        .catch(error => {
+            document.getElementById('status').textContent = 'Lỗi khi gọi API: ' + error.message;
+            console.error('Fetch error:', error);
+        });
+</script>
+ 
+</body>
+</html>
+```
+ 
+### 3.2. Giải thích logic JS
+ 
+- `fetch('/api/dssv')`: gửi request GET tới API (đường dẫn tương đối, tự động dùng domain hiện tại đang mở trang).
+- `.then(response => response.json())`: chuyển response thành object JavaScript.
+- Nếu `data.ok === 1`: duyệt qua mảng `dssv`, tạo từng dòng `<tr>` và chèn vào bảng, gán màu class `du`/`chua` theo `status`.
+- `.catch()`: bắt lỗi nếu API lỗi hoặc mất kết nối, hiển thị thông báo lỗi thay vì để trang trắng.
+> <img width="1917" height="1030" alt="image" src="https://github.com/user-attachments/assets/2bceed41-3a32-467a-bad5-e5ddfacf2946" />
+
+---
+ 
+## 4. Sơ đồ luồng dữ liệu tổng quan
+ 
+```
+Trình duyệt (JS fetch)
+      │
+      ▼
+https://site1.damngocson.id.vn/api/dssv
+      │
+      ▼
+Cloudflare Tunnel → Nginx (location /api/)
+      │
+      ▼
+proxy_pass → Node-RED container :1880/api/dssv
+      │
+      ▼
+[http in] → [function: thuật toán sắp xếp + phân loại] → [http response]
+      │
+      ▼
+Trả JSON: {"ok":1,"msg":"thanh cong","dssv":[...]}
+      │
+      ▼
+JS nhận JSON → render thành bảng HTML
+```
+ 
+---
+ 
+## 5. Các lỗi đã gặp và cách khắc phục
+ 
+| Lỗi | Nguyên nhân | Cách khắc phục |
+|---|---|---|
+| `curl: Cannot GET /api/dssv` | Flow Node-RED chưa Import/Deploy thành công, hoặc sai URL trong node `http in` | Kiểm tra lại tab flow đã import đủ 3 node và nối dây đúng, bấm lại Deploy |
+| Sửa dữ liệu sinh viên nhưng gọi API không thấy thay đổi | Chỉnh code trong node `function` nhưng quên bấm Deploy | Double-click vào node `function` → sửa mảng `dssv` → bấm `Done` → bấm **Deploy** ở góc trên bên phải |
+ 
+---
+ 
+## 6. Kết quả kiểm thử
+ 
+- [x] `curl http://localhost:1880/api/dssv` (nội bộ) → trả JSON đúng
+- [x] `curl https://site1.damngocson.id.vn/api/dssv` (qua domain thật) → trả JSON đúng
+- [x] Mở `https://site1.damngocson.id.vn` trên trình duyệt → bảng dữ liệu hiển thị đúng, sắp xếp giảm dần, phân màu theo trạng thái
+> <img width="1480" height="757" alt="image" src="https://github.com/user-attachments/assets/0d7c1025-09c9-4345-bb20-1f1a2e8b8faa" />
+> <img width="1917" height="1030" alt="image" src="https://github.com/user-attachments/assets/e5cd20e9-fda0-46cb-bfc9-27ddebff254e" />
+
+---
+ 
+## 7. Kết luận
+ 
+Bài tập đã hoàn thành đầy đủ 3 yêu cầu:
+ 
+1. ✅ Tạo API bằng Node-RED với `http in` + `function` (thuật toán tự nghĩ: sắp xếp + phân loại) + `http response`.
+2. ✅ Cấu hình Nginx `location /api/` reverse proxy sang Node-RED, cho phép gọi API qua domain thật `https://site1.damngocson.id.vn/api/dssv`.
+3. ✅ Viết JavaScript (`fetch API`) trong trang HTML để gọi API và hiển thị dữ liệu dưới dạng bảng có định dạng trực quan.
+ 
