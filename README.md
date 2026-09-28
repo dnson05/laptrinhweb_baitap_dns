@@ -445,7 +445,7 @@ GET /api/dssv    Xử lý dữ liệu     Trả về JSON
  
 - **Method**: `GET`
 - **URL**: `/api/dssv`
-### 1.3. Cấu hình node `function` — thuật toán tự nghĩ
+### 1.3. Cấu hình node `function`
  
 Thuật toán áp dụng:
 - **Sắp xếp giảm dần** danh sách sinh viên theo số tiền (`money`).
@@ -460,10 +460,10 @@ const dssv = [
     { name: "Hoang Dinh Diep", money: 250000 }
 ];
  
-// Thuat toan tu nghi: sap xep giam dan theo money
+
 dssv.sort((a, b) => b.money - a.money);
  
-// Thuat toan tu nghi: danh dau trang thai theo dieu kien money >= 300000
+// Thuat toan: danh dau trang thai theo dieu kien money >= 300000
 const dssv_final = dssv.map(sv => ({
     ...sv,
     status: sv.money >= 300000 ? "Du dieu kien" : "Chua du"
